@@ -1323,6 +1323,23 @@ document.addEventListener("DOMContentLoaded", () => {
 }
 </style>
 
+<!-- Sidebar collapsed: keep ONLY the expand button visible -->
+<style id="sidebar-collapsed-only-toggle">
+  /* When collapsed, hide every sidebar block except the top toggle */
+  body.sidebar-collapsed #sidebar > :not(.sidebarTop){
+    display:none !important;
+  }
+  /* Compact the toggle button: icon only */
+  body.sidebar-collapsed #sidebarToggle{
+    width:48px !important;
+    height:48px !important;
+    padding:0 !important;
+    border-radius:12px !important;
+    justify-content:center !important;
+  }
+  body.sidebar-collapsed .sidebarToggleText{ display:none !important; }
+</style>
+
 </head>
 
 <body>
@@ -6541,11 +6558,6 @@ if (btnClearText && ta) {
       const pre = $("jsConsoleLog");
       if (pre) pre.textContent = "";
     });
-    $("jsConsoleToggleBtn")?.addEventListener("click", () => {
-      const pre = $("jsConsoleLog");
-      if (!pre) return;
-      pre.style.display = (pre.style.display === "none") ? "block" : "none";
-    });
 
     $("uuidPortalBtn")?.addEventListener("click", () => {
       if (!storedBaseApi || !storedUUID) { showPortalBadge("err","NO"); return; }
@@ -6971,6 +6983,90 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   } catch (e) {}
 });
+
+
+// ---------------------------------------------------------------------------
+// Fix: Historique des appels API (Copier / Vider / Afficher)
+// But : garantir le binding même si une partie de init() échoue (null refs, etc.).
+// ---------------------------------------------------------------------------
+(function bindApiHistoryButtons(){
+  function safeBind(){
+    const copyBtn   = document.getElementById("jsConsoleCopyBtn");
+    const clearBtn  = document.getElementById("jsConsoleClearBtn");
+    const toggleBtn = document.getElementById("jsConsoleToggleBtn");
+    const logEl     = document.getElementById("jsConsoleLog");
+    const box       = document.getElementById("jsConsoleBox");
+    if(!copyBtn || !clearBtn || !toggleBtn || !logEl || !box) return;
+
+    // Reset inline handlers to avoid duplicate triggers (file may bind elsewhere)
+    copyBtn.onclick = null;
+    clearBtn.onclick = null;
+    toggleBtn.onclick = null;
+
+    async function copyTextToClipboard(text){
+      const txt = (text ?? "").toString();
+      try{
+        if(navigator.clipboard && window.isSecureContext){
+          await navigator.clipboard.writeText(txt);
+          return true;
+        }
+      }catch(e){}
+      try{
+        const ta = document.createElement("textarea");
+        ta.value = txt;
+        ta.setAttribute("readonly", "");
+        ta.style.position = "fixed";
+        ta.style.left = "-9999px";
+        ta.style.top = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        const ok = document.execCommand("copy");
+        document.body.removeChild(ta);
+        return !!ok;
+      }catch(e){
+        return false;
+      }
+    }
+
+    function toast(msg){
+      try{
+        if(typeof showToast === "function") showToast(msg);
+      }catch(e){}
+    }
+
+    toggleBtn.addEventListener("click", (ev)=>{
+      ev.preventDefault();
+      const hidden = (box.style.display === "none") || (getComputedStyle(box).display === "none");
+      if(hidden){
+        box.style.display = "block";
+        toggleBtn.textContent = "Masquer";
+      }else{
+        box.style.display = "none";
+        toggleBtn.textContent = "Afficher";
+      }
+    });
+
+    clearBtn.addEventListener("click", (ev)=>{
+      ev.preventDefault();
+      logEl.textContent = "";
+      toast("Historique vidé.");
+    });
+
+    copyBtn.addEventListener("click", async (ev)=>{
+      ev.preventDefault();
+      const txt = (logEl.innerText || logEl.textContent || "").trim();
+      if(!txt){
+        toast("Historique vide.");
+        return;
+      }
+      const ok = await copyTextToClipboard(txt);
+      toast(ok ? "Historique copié." : "Copie impossible.");
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded", safeBind);
+  window.addEventListener("load", safeBind);
+})();
 
 </script>
 

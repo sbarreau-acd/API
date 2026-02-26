@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8" />
-  <title>Test API ACD</title>
+  <title>DiagAPI</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <!-- =====================
      Styles
@@ -977,6 +977,44 @@ body{ margin:0 !important; max-width:none !important; }
   box-shadow: 0 0 0 3px rgba(210,76,143,0.18);
 }
 
+
+/* ===== Sidebar : Liens rapides ===== */
+#sidebar .sidebarLinksSection{
+  margin: 12px 16px 6px 16px;
+  padding: 10px 10px 12px 10px;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 14px;
+  background: rgba(255,255,255,.04);
+}
+#sidebar .sidebarSectionTitle{
+  font-weight: 800;
+  font-size: 12px;
+  letter-spacing: .2px;
+  margin: 0 0 10px 0;
+  color: rgba(255,255,255,.92);
+}
+#sidebar .sidebarLinksBtns{
+  display:flex;
+  flex-direction: column;
+  gap: 10px;
+}
+#sidebar .sidebarLinksBtns .copybtn{
+  width: 100%;
+  border-radius: 12px;
+}
+
+
+#btnSwaggerSidebar, #btnZendeskSidebar{display:none;}
+
+/* ===== Sidebar : stack Commentaire + Liens rapides ===== */
+#sidebar .headerInputs{
+  display:flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 12px;
+}
+
 </style>
 
 <!-- =====================
@@ -989,6 +1027,7 @@ body{ margin:0 !important; max-width:none !important; }
 
   
   let lastBalanceCurl = "";
+  let lastCabinetsCurl = "";
 function _escapeSingleQuotesForBash(s){
     return String(s).replace(/'/g, `'"'"'`);
   }
@@ -1028,13 +1067,52 @@ function _escapeSingleQuotesForBash(s){
   }
 
   async function fetchWithTrace(url, options){
-    try{
-      window.lastGeneratedCurl = buildCurlCommand(url, options || {});
-    }catch(e){
+    const opts = options || {};
+    const method = String(opts.method || "GET").toUpperCase();
+
+    // Build curl once, and keep it tied to this call (avoid "last call wins" issues)
+    let curl = "";
+    try {
+      curl = buildCurlCommand(url, opts);
+      window.lastGeneratedCurl = curl;
+    } catch (e) {
       window.lastGeneratedCurl = "";
     }
-    return window.fetch(url, options || {});
+
+    // Key used to retrieve the right curl/status/duration later from the JSON viewer
+    function titleKeyFromUrl(u){
+      try{
+        const uu = new URL(u, window.location.href);
+        const p = uu.pathname || "";
+        // Prefer route starting at /v1/...
+        const idx = p.indexOf("/v1/");
+        const route = idx >= 0 ? p.substring(idx) : p;
+        return method + " " + route;
+      }catch(e){
+        return method + " " + String(u || "");
+      }
+    }
+    const titleKey = titleKeyFromUrl(url);
+
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    const resp = await window.fetch(url, opts);
+    const t1 = (window.performance && performance.now) ? performance.now() : Date.now();
+    const durationMs = Math.round(t1 - t0);
+
+    // Backward compatible globals
+    window.lastHttpStatus = resp.status;
+    window.lastHttpDuration = durationMs;
+
+    // Per-route meta (fix: show the correct CURL for the response being displayed)
+    window.__acdLastMetaByTitle = window.__acdLastMetaByTitle || {};
+    window.__acdLastMetaByTitle[titleKey] = { curl: curl, status: resp.status, durationMs: durationMs, at: Date.now() };
+
+    // Attach meta to the response too (sometimes handy for callers)
+    try { resp.__acdCurl = curl; resp.__acdDurationMs = durationMs; } catch(e) {}
+
+    return resp;
   }
+
 
 
 /* ACD - API call logger: logs every route + full response in browser console */
@@ -1228,6 +1306,23 @@ document.addEventListener("DOMContentLoaded", () => {
 }
 </style>
 
+
+<style>
+.btnSidebarLink{
+  width:100%;
+  padding:10px;
+  border-radius:10px;
+  border:none;
+  background:#2d4f77;
+  color:#fff;
+  font-weight:600;
+  cursor:pointer;
+}
+.btnSidebarLink:hover{
+  background:#3a6799;
+}
+</style>
+
 </head>
 
 <body>
@@ -1241,8 +1336,8 @@ document.addEventListener("DOMContentLoaded", () => {
     </button>
   </div>
 
-  <div><h1>Test API ACD</h1>
-<div class="acd-version" style="font-size:14px;font-weight:600;margin-top:4px;opacity:.85;">V26.02-23.25</div>
+  <div><h1>DiagAPI</h1>
+<div class="acd-version" style="font-size:14px;font-weight:600;margin-top:4px;opacity:.85;">V26.02-26</div>
       <div class="headerMeta"><div class="subtle" id="prettyVersion">—</div><div class="status"></div></div></div>
   
   <div class="headerInputs" aria-label="Informations export">
@@ -1269,7 +1364,17 @@ document.addEventListener("DOMContentLoaded", () => {
         <textarea id="commentaireInput" class="sidebarTextarea" maxlength="500" placeholder="Commentaire (optionnel)…"></textarea>
       </div>
     </div>
+  
+  <!-- 🔗 Liens rapides (Console Pro) -->
+  <div class="sidebarLinksSection" aria-label="Liens rapides">
+    <div class="sidebarSectionTitle">🔗 Liens rapides</div>
+    <div class="sidebarLinksBtns">
+      <button type="button" class="copybtn" id="btnSwaggerSidebar" type="button" title="Ouvrir Swagger dans un nouvel onglet">SWAGGER</button>
+      <button type="button" class="copybtn" id="btnZendeskSidebar" type="button" title="Ouvrir le ticket Zendesk (si renseigné)">Ticket Zendesk</button>
+    </div>
   </div>
+
+</div>
 <div class="headerActions" style="display:flex; align-items:center; gap:10px;">
   <span id="envBadge" class="env-badge env-client" title="Environnement : CLIENT">CLIENT</span>
   
@@ -1426,9 +1531,9 @@ document.addEventListener("DOMContentLoaded", () => {
 	  <div style="margin-top:16px;">
     <div style="font-size:13px; font-weight:900; color:var(--muted); margin-bottom:6px;">Liens</div>
     <div class="actions" style="margin:0;">
-      <button class="copybtn" id="btnSwagger" type="button">SWAGGER</button>
+      
       <button class="copybtn" id="btnTestComptaWeb" type="button">Test ComptaWeb</button>
-      <button class="copybtn" id="btnTicketZendesk" type="button" style="display:none;">Ticket Zendesk</button>
+      
     </div>
 	    <div class="acd-separator"></div>
   </div>
@@ -1503,8 +1608,9 @@ document.addEventListener("DOMContentLoaded", () => {
       <div class="sessionVal" style="display:flex; align-items:center; gap:8px; justify-content:flex-end;">
         <span id="sNbDossiers">—</span>
         <button class="copybtn" id="btnDossiersDetail" type="button">Détail</button>
+		        <button class="copybtn" id="btnDossiersCsv" type="button">CSV</button>
         <button class="copybtn" id="btnDossiersJson" type="button">JSON</button>
-        <button class="copybtn" id="btnDossiersCsv" type="button">CSV</button>
+
       </div>
     </div>
 
@@ -2366,6 +2472,7 @@ function downloadCsvFile(data, filename){
   let exercicesList = [];
   let lastBalanceJson = null;
     lastBalanceCurl = "";
+  
   let lastGrandLivreGenerauxJson = null;
   let lastGrandLivreClientsJson = null;
   let lastGrandLivreFournisseursJson = null;
@@ -2382,10 +2489,52 @@ function downloadCsvFile(data, filename){
   let lastComptesFournisseursJson = null;
   let lastCodesTvaJson = null;
   let lastAnaSectionsJson = null;
+  // --- Dernières commandes cURL par endpoint (pour la fenêtre JSON) ---
+  let lastSecuritesCurl = "";
+  let lastDossiersVisiblesCurl = "";
+  let lastCabinetsVisiblesCurl = "";
+  let lastExerciceDefautCurl = "";
+  let lastJournauxCurl = "";
+  let lastComptesGenerauxCurl = "";
+  let lastComptesClientsCurl = "";
+  let lastComptesFournisseursCurl = "";
+
 
   let storedUUID = sessionStorage.getItem("ACD_UUID") || "";
   let lastComptaDossierJson = null;
   let storedBaseApi = sessionStorage.getItem("ACD_BASE_API") || "";
+
+  // --- Export JSON helpers (global scope) ---
+  // Récupère /v1/compta/dossier et alimente lastComptaDossierJson pour l'export JSON.
+  // (Déclaré au scope global pour être accessible depuis les handlers.)
+  async function fetchComptaDossierForExport() {
+    try {
+      const baseApiUrl = (storedBaseApi || deriveBaseApi($("urlInput")?.value || "")).replace(/\/+$/,"");
+      const uuid = (storedUUID || $("uuidValue")?.textContent?.trim() || "").trim();
+      if (!baseApiUrl || !uuid) return null;
+
+      const url = baseApiUrl + "/v1/compta/dossier";
+      const res = await fetchWithTrace(url, { method: "GET", headers: { "accept": "text/plain", "UUID": uuid } });
+
+      const raw = await res.text();
+      let data = null;
+      try { data = raw ? JSON.parse(raw) : null; } catch { data = null; }
+
+      // On conserve quelque chose même en erreur (400/401/…)
+      lastComptaDossierJson = res.ok ? data : { "ErreurHTTP": res.status, "Raw": raw };
+
+      // Rafraîchit le panneau "Paramétrage comptable" si la fonction existe
+      if (res.ok && data && typeof renderComptaDossierParams === "function") {
+        try { renderComptaDossierParams(data); } catch(e) {}
+      }
+      return lastComptaDossierJson;
+    } catch (e) {
+      // Ne pas casser l'export : on enregistre l'erreur et on continue
+      lastComptaDossierJson = { "ErreurJS": String(e?.message || e) };
+      return null;
+    }
+  }
+
   
   let storedBaseUrlSaisie = sessionStorage.getItem("ACD_BASE_URL_SAISIE") || "";
 let lastApiInformationsJson = null;
@@ -2605,10 +2754,13 @@ function updateGedValidateState() {
       const url = joinUrlParts(storedBaseApi, "v1/compta/journal");
       jsConsoleLog("GED URL journaux", url);
       const resp = await fetchWithTrace(url, { headers: { "accept":"text/plain", "UUID": storedUUID } });
+      lastSecuritesCurl = resp.__acdCurl || "";
       const raw = await resp.text();
       jsConsoleLog("GED HTTP journaux", { status: resp.status, ok: resp.ok, raw: raw.slice(0, 1000) });
       const data = raw ? JSON.parse(raw) : [];
       lastJournauxJson = data;
+        lastJournauxCurl = resp.__acdCurl || "";
+      lastJournauxCurl = resp.__acdCurl || "";
 
       if (!Array.isArray(data) || data.length === 0) {
         const opt = document.createElement("option");
@@ -3364,6 +3516,7 @@ function openJsonWindow(title, data, generatedAtText, suggestedFilename, curlCom
     if (!w) return;
 
     const safeTitle = title ? String(title) : "JSON";
+    const hideCurl = safeTitle.trim().toLowerCase() === 'export json';
     const jsonText = JSON.stringify(data ?? null, null, 2);
 
     const esc = (s) => String(s)
@@ -3372,9 +3525,16 @@ function openJsonWindow(title, data, generatedAtText, suggestedFilename, curlCom
 
     const embedded = JSON.stringify(data ?? null).replace(/</g, "\\u003c");
     const embeddedFilename = JSON.stringify(String(suggestedFilename || "")).replace(/</g, "\\u003c");
-    const embeddedStatus = JSON.stringify(window.lastHttpStatus || null);
-const embeddedDuration = JSON.stringify(window.lastHttpDuration || null);
-const embeddedCurl = JSON.stringify(String(curlCommand || window.lastGeneratedCurl || "")).replace(/</g, "\u003c");
+    // Prefer meta tied to this endpoint/method (avoids mismatched CURL when multiple calls happened before opening the viewer)
+    const metaKey = safeTitle.replace(/\s+/g, " ").trim();
+    const meta = (window.__acdLastMetaByTitle && window.__acdLastMetaByTitle[metaKey]) ? window.__acdLastMetaByTitle[metaKey] : null;
+
+    const embeddedStatus = JSON.stringify((meta && meta.status != null) ? meta.status : (window.lastHttpStatus || null));
+    const embeddedDuration = JSON.stringify((meta && meta.durationMs != null) ? meta.durationMs : (window.lastHttpDuration || null));
+
+    // If a curlCommand was explicitly provided and looks valid, keep it; otherwise use the per-title meta
+    const chosenCurl = (curlCommand && String(curlCommand).trim()) ? String(curlCommand) : ((meta && meta.curl) ? meta.curl : (window.lastGeneratedCurl || ""));
+    const embeddedCurl = JSON.stringify(chosenCurl).replace(/</g, "\\u003c");
     const childScriptOpen = "<scr" + "ipt>";
     const childScriptClose = "</scr" + "ipt>";
 
@@ -3879,9 +4039,35 @@ button[id*="Json"], input[id*="Json"], a[id*="Json"]{
 }
 </style>
 
+
+<style>
+.btnSidebarLink{
+  width:100%;
+  padding:10px;
+  border-radius:10px;
+  border:none;
+  background:#2d4f77;
+  color:#fff;
+  font-weight:600;
+  cursor:pointer;
+}
+.btnSidebarLink:hover{
+  background:#3a6799;
+}
+</style>
+
 </head><body>`);
 
-    parts.push('<div class="top"><div><h1>' + esc(safeTitle) + '</h1><div class="hint">Réponse API (JSON) <span id="genAt" style="margin-left:8px;opacity:.85"></span></div></div>');parts.push('<div class="btns"><button id="btnCopy">Copier</button><button id="btnSave">Enregistrer</button><button id="btnToggleCurl" type="button">Masquer CURL</button><button id="btnCopyCurl">📋 Copier CURL</button></div></div>');parts.push('<div class="searchbar">'      + '<input id="q" type="text" placeholder="Rechercher dans le JSON…" />'      + '<label><input id="cs" type="checkbox"/> Casse</label>'      + '<span class="meta" id="matchCount">0</span>'      + '<button id="btnClearSearch" type="button">Effacer</button>'      + '</div>');parts.push('<div id="curlWrap" class="curlWrap" style="display:none"><div class="curlHead">Commande CURL <button id="btnCopyCurlMini" type="button" class="miniBtn" title="Copier">📋</button></div><pre id="curlBox" class="curlPre"></pre></div>');parts.push('<div style="margin:14px 0 8px 0;font-weight:700;font-size:14px;letter-spacing:0.3px;">📄 Réponse API format JSON</div>');parts.push('<pre id="jsonBox">' + esc(jsonText) + '</pre>');parts.push(childScriptOpen);
+    parts.push('<div class="top">'
+        + '<div><h1>' + esc(safeTitle) + '</h1>'
+        + '<div class="hint">Réponse API (JSON) <span id="genAt" class="meta"></span></div></div>'
+        + '<div class="btns">'
+        + '<button id="btnCopy" type="button">Copier</button>'
+        + '<button id="btnSave" type="button">Enregistrer</button>'
+        + (hideCurl ? '' : '<button id="btnToggleCurl" type="button" style="display:none">Masquer CURL</button>')
+        + (hideCurl ? '' : '<button id="btnCopyCurl" type="button" style="display:none">📋 Copier CURL</button>')
+        + '</div>'
+        + '</div>');parts.push('<div class="searchbar">'      + '<input id="q" type="text" placeholder="Rechercher dans le JSON…" />'      + '<label><input id="cs" type="checkbox"/> Casse</label>'      + '<span class="meta" id="matchCount">0</span>'      + '<button id="btnClearSearch" type="button">Effacer</button>'      + '</div>');if (!hideCurl) { parts.push('<div id="curlWrap" class="curlWrap" style="display:none"><div class="curlHead">Commande CURL <button id="btnCopyCurlMini" type="button" class="miniBtn" title="Copier">📋</button></div><pre id="curlBox" class="curlPre"></pre></div>'); }parts.push('<div style="margin:14px 0 8px 0;font-weight:700;font-size:14px;letter-spacing:0.3px;">📄 Réponse API format JSON</div>');parts.push('<pre id="jsonBox">' + esc(jsonText) + '</pre>');parts.push(childScriptOpen);
     parts.push('const data = ' + embedded + ';');parts.push('const suggestedFilename = ' + embeddedFilename + ';');parts.push('const curl = ' + embeddedCurl + ';');parts.push('const httpStatus = ' + embeddedStatus + ';');parts.push('const httpDuration = ' + embeddedDuration + ';');parts.push('const text = JSON.stringify(data, null, 2);');parts.push(`
     // --- Recherche + surbrillance dans le JSON ---
     const box = document.getElementById("jsonBox");
@@ -3957,12 +4143,12 @@ parts.push('const curlWrap = document.getElementById("curlWrap");');
 parts.push('const curlBox = document.getElementById("curlBox");');
 parts.push('const btnToggleCurl = document.getElementById("btnToggleCurl");');
 parts.push('const btnCopyCurlMini = document.getElementById("btnCopyCurlMini");');
-parts.push('if(curl && curlWrap && curlBox){ curlWrap.style.display="block"; curlBox.innerHTML = highlightCurl(curl); } else { if(btnToggleCurl) btnToggleCurl.style.display="none"; }');
+parts.push('if(curl && curlWrap && curlBox){ (curlWrap && curlWrap.style).display="block"; curlBox.innerHTML = highlightCurl(curl); } else { if(btnToggleCurl) (btnToggleCurl && btnToggleCurl.style).display="none"; }');
 
 parts.push('async function _copyCurl(){ if(!curl){ alert("Aucun CURL disponible pour cette réponse."); return; } try{ await navigator.clipboard.writeText(curl); } catch(e){ const ta=document.createElement("textarea"); ta.value=curl; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); document.body.removeChild(ta);} }');
 
-parts.push('if(btnToggleCurl){ let open=false; btnToggleCurl.addEventListener("click", async ()=>{ open=!open; if(!curlWrap) return; curlWrap.style.display = open ? "block" : "none"; btnToggleCurl.textContent = open ? "Masquer CURL" : "Voir CURL"; if(open){ await _copyCurl(); } }); }');
-parts.push('if(btnCopyCurlMini){ btnCopyCurlMini.addEventListener("click", _copyCurl); }');
+parts.push('if(btnToggleCurl){ let open=false; btnToggleCurl && btnToggleCurl.addEventListener("click", async ()=>{ open=!open; if(!curlWrap) return; (curlWrap && curlWrap.style).display = open ? "block" : "none"; btnToggleCurl.textContent = open ? "Masquer CURL" : "Voir CURL"; if(open){ await _copyCurl(); } }); }');
+parts.push('if(btnCopyCurlMini){ btnCopyCurlMini && btnCopyCurlMini.addEventListener("click", _copyCurl); }');
 
 
 parts.push(`
@@ -3991,7 +4177,7 @@ parts.push(childScriptClose);
 
 
 
-    parts.push('</body></html>');w.document.open();
+    parts.push('</body></html>');
     w.document.write(parts.join(""));
     w.document.close();
   }
@@ -4027,6 +4213,7 @@ parts.push(childScriptClose);
   function resetBadges() {
     lastBalanceJson = null;
     lastBalanceCurl = "";
+  
     exercicesList = [];
 
     lastExercicesJson = null;
@@ -4080,6 +4267,7 @@ parts.push(childScriptClose);
     $("balanceTbody").innerHTML = "";
     lastBalanceJson = null;
     lastBalanceCurl = "";
+  
     exercicesList = [];
   }
 
@@ -4472,7 +4660,6 @@ const uuid = ($("uuidInput").value || "").trim();
 
     try {
       const resp = await fetchWithTrace(url, { method: "GET", headers: { "accept": "text/plain", "UUID": storedUUID } });
-
       const raw = await resp.text();
       let data;
       try { data = raw ? JSON.parse(raw) : null; }
@@ -4574,7 +4761,6 @@ setBadgeBoolOnly("bEch", boolFromON(data?.GestionEcheancier));
 
     try {
       const resp = await fetchWithTrace(url, { method: "GET", headers: { "accept": "text/plain", "UUID": storedUUID } });
-
       const raw = await resp.text();
       let data;
       try { data = raw ? JSON.parse(raw) : null; }
@@ -4582,6 +4768,7 @@ setBadgeBoolOnly("bEch", boolFromON(data?.GestionEcheancier));
 
       (document.getElementById("exercicesJsonBox") ? (document.getElementById("exercicesJsonBox").textContent = JSON.stringify(data, null, 2)) : null);
       lastExercicesJson = data;
+      lastExerciceDefautCurl = resp.__acdCurl || "";
 
       if (!resp.ok) return;
 
@@ -4687,7 +4874,6 @@ setBadgeBoolOnly("bEch", boolFromON(data?.GestionEcheancier));
 
     try {
       const resp = await fetchWithTrace(url, { method: "GET", headers: { "accept": "text/plain", "UUID": storedUUID } });
-
       const raw = await resp.text();
       let data;
       try { data = raw ? JSON.parse(raw) : null; }
@@ -4806,6 +4992,7 @@ async function fetchBalanceGeneraux() {
     $("btnBalanceDetail").textContent = "Détail";
     lastBalanceJson = null;
     lastBalanceCurl = "";
+  
 
     const url = joinUrlParts(storedBaseApi, "v1/compta/balance/generaux");
     const body = {
@@ -5179,6 +5366,7 @@ try {
 
     try {
       const resp = await fetchWithTrace(url, { method: "GET", headers: { "accept": "text/plain", "UUID": storedUUID } });
+      lastCabinetsCurl = resp.__acdCurl || "";
       const raw = await resp.text();
       let data;
       try { data = raw ? JSON.parse(raw) : null; } catch { data = raw; }
@@ -5453,7 +5641,7 @@ $("btnJournauxDetail")?.addEventListener("click", () => {
   
   // Boutons JSON (ouverture nouvelle fenêtre)
   $("btnExercicesJson")?.addEventListener("click", () => openJsonWindow("GET /v1/compta/exercices", lastExercicesJson));
-  $("btnJournauxJson")?.addEventListener("click", () => openJsonWindow("GET /v1/compta/journal", lastJournauxJson));
+  $("btnJournauxJson")?.addEventListener("click", () => openJsonWindow("GET /v1/compta/journaux", lastJournauxJson, "", "", lastJournauxCurl));
   $("btnComptesGenerauxJson")?.addEventListener("click", () => openJsonWindow("GET /v1/compta/comptes/generaux", lastComptesGenerauxJson));
   $("btnComptesClientsJson")?.addEventListener("click", () => openJsonWindow("GET /v1/compta/comptes/clients", lastComptesClientsJson));
   $("btnComptesFournisseursJson")?.addEventListener("click", () => openJsonWindow("GET /v1/compta/comptes/fournisseurs", lastComptesFournisseursJson));
@@ -5544,7 +5732,7 @@ $("btnJournauxDetail")?.addEventListener("click", () => {
     wrap.classList.toggle("hidden", !hidden, window.lastGeneratedCurl);
     $("btnSecuritesDetail").textContent = hidden ? "Masquer" : "Détail";
   });
-  $("btnSecuritesJson")?.addEventListener("click", () => openJsonWindow("GET /v1/collaborateurs/{Identifiant}", lastSecuritesJson));
+  $("btnSecuritesJson")?.addEventListener("click", () => openJsonWindow("GET /v1/collaborateurs/{Identifiant}", lastSecuritesJson, "", "", lastSecuritesCurl));
 
 
   // Session : Dossiers / Cabinets
@@ -5554,7 +5742,7 @@ $("btnJournauxDetail")?.addEventListener("click", () => {
     wrap.classList.toggle("hidden", !hidden, window.lastGeneratedCurl);
     $("btnDossiersDetail").textContent = hidden ? "Masquer" : "Détail";
   });
-  $("btnDossiersJson")?.addEventListener("click", () => openJsonWindow("GET /v1/dossiers", lastDossiersJson));
+  $("btnDossiersJson")?.addEventListener("click", () => openJsonWindow("GET /v1/dossiers", lastDossiersJson, "", "", lastDossiersVisiblesCurl));
 
   
   $("btnDossiersCsv")?.addEventListener("click", () => {
@@ -5620,7 +5808,7 @@ $("btnJournauxDetail")?.addEventListener("click", () => {
     wrap.classList.toggle("hidden", !hidden);
     $("btnCabinetsDetail").textContent = hidden ? "Masquer" : "Détail";
   });
-  $("btnCabinetsJson")?.addEventListener("click", () => openJsonWindow("GET /v1/cabinets", lastCabinetsJson));
+  $("btnCabinetsJson")?.addEventListener("click", () => openJsonWindow("GET /v1/cabinets", lastCabinetsJson, null, null, lastCabinetsCurl));
 
   
   $("btnDownloadFec")?.addEventListener("click", () => downloadFec());
@@ -5907,9 +6095,109 @@ openJsonWindow("Export JSON", payload, generatedAt, filename, window.lastGenerat
       }
     })();  }
 
-  (function init() {
 
-    // Environnement (badge)
+
+
+
+function initSidebarLinks(){
+  const btnSwagger = document.getElementById("btnSwaggerSidebar");
+  const btnZendesk = document.getElementById("btnZendeskSidebar");
+  const refInput = document.getElementById("referenceInput");
+
+  const getUuid = () => {
+    try{
+      const u1 = (typeof storedUUID !== "undefined" && storedUUID) ? String(storedUUID).trim() : "";
+      if (u1) return u1;
+      const u2 = ($("uuidValue")?.textContent || "").trim();
+      if (u2) return u2;
+      return (sessionStorage.getItem("ACD_UUID") || "").trim();
+    }catch(e){
+      return (sessionStorage.getItem("ACD_UUID") || "").trim();
+    }
+  };
+
+  const getBaseSaisie = () => (document.getElementById("urlInput")?.value || document.getElementById("urlSaisie")?.value || "").trim();
+
+  const getBaseApi = () => {
+    // 1) stockage (si l'app l'alimente)
+    const s = (sessionStorage.getItem("ACD_BASE_API") || "").trim();
+    if (s) return s.replace(/\/+$/,"");
+    // 2) variables globales
+    try{
+      const b1 = (typeof storedBaseApi !== "undefined" && storedBaseApi) ? String(storedBaseApi).trim() : "";
+      if (b1) return b1.replace(/\/+$/,"");
+      const b2 = (typeof baseApi !== "undefined" && baseApi) ? String(baseApi).trim() : "";
+      if (b2) return b2.replace(/\/+$/,"");
+    }catch(e){}
+    // 3) fallback sur URL saisie
+    const bSaisie = getBaseSaisie();
+    return bSaisie ? (bSaisie.replace(/\/+$/,"") + "/api") : "";
+  };
+
+  function refreshQuickLinks(){
+    const uuid = getUuid();
+    if (btnSwagger) btnSwagger.style.display = uuid ? "block" : "none";
+
+    const ticket = (refInput?.value || "").trim();
+    if (btnZendesk) btnZendesk.style.display = ticket ? "block" : "none";
+  }
+  window.refreshQuickLinks = refreshQuickLinks;
+
+  // Timer léger (évite d'avoir à recharger) - ne crée qu'un seul interval
+  if (!window.__acdkQuickLinksTimer){
+    window.__acdkQuickLinksTimer = setInterval(refreshQuickLinks, 500);
+  }
+
+  if (refInput){
+    if (!refInput.dataset.quickLinksBound){
+      refInput.dataset.quickLinksBound = "1";
+      refInput.addEventListener("input", refreshQuickLinks);
+      refInput.addEventListener("change", refreshQuickLinks);
+    }
+  }
+
+  // Bind click handlers ONCE to avoid multiple window.open => popups blocked
+  if (btnSwagger && !btnSwagger.dataset.quickLinksBound){
+    btnSwagger.dataset.quickLinksBound = "1";
+    btnSwagger.addEventListener("click", () => {
+      const uuid = getUuid();
+      if (!uuid){
+        alert("UUID non défini. Connectez-vous d'abord.");
+        return;
+      }
+      const baseApi = getBaseApi();
+      if (!baseApi){
+        alert("URL Swagger non disponible.");
+        return;
+      }
+      const url = baseApi.replace(/\/+$/,"") + "/swagger";
+      const w = window.open(url, "_blank", "noopener,noreferrer");
+      if(!w){/* popup blocked */}
+    });
+  }
+
+  if (btnZendesk && !btnZendesk.dataset.quickLinksBound){
+    btnZendesk.dataset.quickLinksBound = "1";
+    btnZendesk.addEventListener("click", () => {
+      const t = (refInput?.value || "").trim();
+      if (!t){
+        alert("URL Ticket Zendesk non disponible.");
+        return;
+      }
+      const url = "https://acd1581.zendesk.com/agent/tickets/" + encodeURIComponent(t);
+      const w = window.open(url, "_blank", "noopener,noreferrer");
+      if(!w){/* popup blocked */}
+    });
+  }
+
+  refreshQuickLinks();
+}
+
+function init() {
+
+    
+  try{ initSidebarLinks(); }catch(e){}
+// Environnement (badge)
     updateEnvBadge();
     refreshGrandLivreButtons();
     $("urlInput")?.addEventListener("input", updateEnvBadge);
@@ -6325,7 +6613,6 @@ $("testLocalBtn")?.addEventListener("click", () => { $("urlInput").value = "http
     } else {
       hideSession();
     }
-  })();
   async function fetchComptaDossierForExport() {
   try {
     const baseApiUrl = storedBaseApi || deriveBaseApi($("urlInput")?.value || "");
@@ -6413,6 +6700,13 @@ $("testLocalBtn")?.addEventListener("click", () => { $("urlInput").value = "http
         return;
       }
     });
+  } // <-- fin init()
+
+  // Boot
+  document.addEventListener("DOMContentLoaded", () => {
+    try { if (typeof initSidebarLinks === "function") initSidebarLinks(); } catch(e) {}
+    try { if (typeof init === "function") init(); } catch(e) { console.error(e); }
+  });
 </script>
 
 
@@ -6679,6 +6973,9 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 </script>
+
+
+
 
 
 

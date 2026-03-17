@@ -7459,10 +7459,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
 </script>
 </div></main></div>
+
 <script id="acd-sso-query-autofill">
 (function(){
   function getParam(params, name){
     return params.get(name) || params.get(name.toLowerCase()) || params.get(name.toUpperCase()) || "";
+  }
+
+  function normalizeUrl(raw){
+    var v = String(raw || "").trim();
+    if(!v) return "";
+    return v.replace(/\/+$/, "");
   }
 
   function normalizeRefererUrl(referer){
@@ -7470,10 +7477,26 @@ document.addEventListener("DOMContentLoaded", () => {
     if(!raw) return "";
     try{
       var u = new URL(raw);
-      return (u.origin + u.pathname).replace(/\/+$/, "");
+      return normalizeUrl(u.origin + u.pathname);
     }catch(e){
-      return raw.replace(/\/+$/, "");
+      return normalizeUrl(raw);
     }
+  }
+
+  function readStoredApiUrl(){
+    try{
+      var v1 = localStorage.getItem("ACD_API_URL") || "";
+      if(v1) return normalizeUrl(v1);
+    }catch(e){}
+    try{
+      var v2 = sessionStorage.getItem("ACD_API_URL") || "";
+      if(v2) return normalizeUrl(v2);
+    }catch(e){}
+    try{
+      var v3 = sessionStorage.getItem("ACD_BASE_API") || "";
+      if(v3) return normalizeUrl(v3);
+    }catch(e){}
+    return "";
   }
 
   function setVal(id, value){
@@ -7497,7 +7520,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if(btn){
       setTimeout(function(){
         try { btn.click(); } catch(e){}
-      }, 250);
+      }, 300);
     }
   }
 
@@ -7511,16 +7534,26 @@ document.addEventListener("DOMContentLoaded", () => {
 
     activateUuidTab();
 
-    var refererBase = normalizeRefererUrl(referer);
     var resolvedUrl = "";
+    var refererBase = normalizeRefererUrl(referer);
+
     if(refererBase && cnx){
-      resolvedUrl = refererBase.replace(/\/+$/, "") + "/" + cnx.replace(/^\/+|\/+$/g, "") + "/api";
+      resolvedUrl = refererBase + "/" + cnx.replace(/^\/+|\/+$/g, "") + "/api";
+    } else {
+      var storedApiUrl = readStoredApiUrl();
+      if(storedApiUrl){
+        resolvedUrl = storedApiUrl;
+      }
     }
+
+    resolvedUrl = normalizeUrl(resolvedUrl);
 
     if(resolvedUrl){
       setVal("urlInput2", resolvedUrl);
       setVal("urlInput", resolvedUrl);
       try { if (typeof updateEnvBadge === "function") updateEnvBadge(); } catch(e){}
+      try { localStorage.setItem("ACD_API_URL", resolvedUrl); } catch(e){}
+      try { sessionStorage.setItem("ACD_API_URL", resolvedUrl); } catch(e){}
     }
 
     if(uuid){
@@ -7537,6 +7570,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 })();
 </script>
+
 
 </body>
 </html>

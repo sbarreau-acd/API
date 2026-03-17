@@ -7460,6 +7460,7 @@ document.addEventListener("DOMContentLoaded", () => {
 </script>
 </div></main></div>
 
+
 <script id="acd-sso-query-autofill">
 (function(){
   function getParam(params, name){
@@ -7528,14 +7529,22 @@ document.addEventListener("DOMContentLoaded", () => {
     var params = new URLSearchParams(window.location.search || "");
     var cnx = String(getParam(params, "CNX")).trim();
     var uuid = String(getParam(params, "UUID")).trim();
-    var referer = String(getParam(params, "REFERER")).trim();
+    var refererParam = String(getParam(params, "REFERER")).trim();
+    var refererDoc = String(document.referrer || "").trim();
 
-    if(!cnx && !uuid && !referer) return;
+    if(!cnx && !uuid && !refererParam && !refererDoc) return;
 
     activateUuidTab();
 
     var resolvedUrl = "";
-    var refererBase = normalizeRefererUrl(referer);
+    var refererBase = "";
+
+    // Priorité : REFERER passé en paramètre > document.referrer > storage
+    if(refererParam){
+      refererBase = normalizeRefererUrl(refererParam);
+    } else if(refererDoc){
+      refererBase = normalizeRefererUrl(refererDoc);
+    }
 
     if(refererBase && cnx){
       resolvedUrl = refererBase + "/" + cnx.replace(/^\/+|\/+$/g, "") + "/api";
@@ -7563,13 +7572,15 @@ document.addEventListener("DOMContentLoaded", () => {
     try{
       if(cnx) sessionStorage.setItem("ACD_SSO_CNX", cnx);
       if(uuid) sessionStorage.setItem("ACD_SSO_UUID", uuid);
-      if(referer) sessionStorage.setItem("ACD_SSO_REFERER", referer);
+      if(refererParam) sessionStorage.setItem("ACD_SSO_REFERER", refererParam);
+      if(!refererParam && refererDoc) sessionStorage.setItem("ACD_SSO_REFERER", refererDoc);
     }catch(e){}
 
     maybeAutoConnect(resolvedUrl, cnx, uuid);
   });
 })();
 </script>
+
 
 
 </body>
